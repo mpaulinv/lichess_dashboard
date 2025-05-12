@@ -3,5 +3,4 @@ streamlit
 plotly
 datetime
 requests
-json
 chess
