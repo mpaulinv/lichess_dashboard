@@ -30,7 +30,7 @@ import pandas as pd
 from pgn_parser import parse_pgn  # Import the PGN parser function
 
 
-def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max_games=None):
+def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max_games=None, analyzed=False):
     """
     Fetch games for a given user from the Lichess API, including PGN data.
 
@@ -39,7 +39,8 @@ def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max
     :param until: End date (in milliseconds since epoch) or None for all games
     :param perf_type: Game type (e.g., blitz, bullet, rapid)
     :param max_games: Maximum number of games to retrieve (optional)
-    :return: DataFrame containing game data
+    :param analyzed: If True, fetch only analyzed games; if False, fetch only non-analyzed games; if None, fetch all games
+    :return: List of dictionaries containing game data
     """
     # Lichess API endpoint for games
     url = f"https://lichess.org/api/games/user/{username}"
@@ -50,8 +51,7 @@ def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max
         "pgnInJson": True,  # Include PGN in the response
         "accuracy": True,
         "opening": True,
-        "analysed": True
-        
+        "analysed": analyzed  # Default to False unless specified
     }
     if since:
         params["since"] = since
@@ -116,9 +116,6 @@ def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max
             user_color = "white" if white_username.lower() == username.lower() else "black"
 
             # Extract PGN-specific attributes
-#            print(f"Raw PGN for game {game.get('id', 'Unknown')}:")
-#            print(game["pgn"])
-
             pgn_info = parse_pgn(game["pgn"])  # Use the PGN parser to extract attributes like OpeningName
 
             # Append the extracted data

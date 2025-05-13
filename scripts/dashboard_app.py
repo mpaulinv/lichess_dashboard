@@ -30,10 +30,14 @@ def main():
 
     # Sidebar inputs
     st.sidebar.header("Input Parameters")
-    username = st.sidebar.text_input("Enter your Lichess username", value="mpaulinv")
+    username = st.sidebar.text_input("Enter your Lichess username", value="")
     start_date = st.sidebar.date_input("Start Date")
     end_date = st.sidebar.date_input("End Date")
     variant = st.sidebar.selectbox("Select Game Variant", ["blitz", "bullet", "rapid", "classical"])
+    analyzed_filter = st.sidebar.selectbox(
+        "Filter by Analysis",
+        ["All Games", "Analyzed Games Only", "Non-Analyzed Games"]
+    )
 
     # Fetch data button
     if st.sidebar.button("Fetch Data"):
@@ -41,10 +45,17 @@ def main():
         since = int(pd.Timestamp(start_date).timestamp() * 1000)
         until = int(pd.Timestamp(end_date).timestamp() * 1000)
 
+        # Determine the analyzed parameter
+        analyzed = None
+        if analyzed_filter == "Analyzed Games Only":
+            analyzed = True
+        elif analyzed_filter == "Non-Analyzed Games":
+            analyzed = False
+
         # Fetch games
         with st.spinner("Fetching games..."):
             try:
-                games_data = fetch_lichess_games(username, since, until, variant)
+                games_data = fetch_lichess_games(username, since, until, variant, analyzed=analyzed)
                 games_df = pd.DataFrame(games_data)
 
                 if games_df.empty:
