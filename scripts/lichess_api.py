@@ -92,8 +92,8 @@ def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max
                 continue
 
             # Skip unfinished games
-            if game.get("status") not in ["mate", "resign", "draw", "timeout", "stalemate", "aborted"]:
-                continue
+            #if game.get("status") not in ["mate", "resign", "draw", "timeout", "stalemate", "aborted"]:
+            #    continue
             # Check if the "pgn" key exists
             if "pgn" not in game:
                 continue
