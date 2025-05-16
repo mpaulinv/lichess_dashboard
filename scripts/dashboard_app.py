@@ -1,31 +1,12 @@
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-from lichess_api import fetch_lichess_games
+import numpy as np
+from data_processing import fetch_and_preprocess
 
-# Calculate win rates
-def calculate_win_rates(data):
-    white_games = data[data['UserColor'] == 'white']
-    black_games = data[data['UserColor'] == 'black']
 
-    white_wins = white_games[white_games['Result'] == 'white'].shape[0]
-    black_wins = black_games[black_games['Result'] == 'black'].shape[0]
-
-    total_white_games = white_games.shape[0]
-    total_black_games = black_games.shape[0]
-
-    white_win_rate = (white_wins / total_white_games) * 100 if total_white_games > 0 else 0
-    black_win_rate = (black_wins / total_black_games) * 100 if total_black_games > 0 else 0
-
-    return white_win_rate, black_win_rate
-
-# Calculate games by result
-def calculate_games_by_result(data):
-    results = data['Result'].value_counts()
-    return results
-
-# Streamlit app
 def main():
+    st.set_page_config(page_title="Lichess Dashboard", layout="wide")
     st.title("Lichess Dashboard")
 
     # Sidebar inputs
@@ -37,6 +18,10 @@ def main():
     analyzed_filter = st.sidebar.selectbox(
         "Filter by Analysis",
         ["All Games", "Analyzed Games Only", "Non-Analyzed Games"]
+    )
+    rated_filter = st.sidebar.selectbox(
+        "Include Games",
+        ["All Games", "Rated Games Only", "Non-Rated Games Only"]  # Dropdown for rated filter
     )
 
     # Fetch data button
@@ -52,48 +37,95 @@ def main():
         elif analyzed_filter == "Non-Analyzed Games":
             analyzed = False
 
-        # Fetch games
-        with st.spinner("Fetching games..."):
-            try:
-                games_data = fetch_lichess_games(username, since, until, variant, analyzed=analyzed)
-                games_df = pd.DataFrame(games_data)
+        # Determine the rated parameter
+        rated = None
+        if rated_filter == "Rated Games Only":
+            rated = True
+        elif rated_filter == "Non-Rated Games Only":
+            rated = False
 
-                if games_df.empty:
-                    st.warning("No games found for the given parameters.")
-                else:
-                    # Display dashboards
-                    st.write(f"### Chess Dashboard for {username}")
+        # Fetch and preprocess data
+        with st.spinner("Fetching and preprocessing data..."):
+            csv_dict = fetch_and_preprocess(username, since, until, variant, analyzed, rated)
 
-                    # Data preview
-                    st.write("### Data Preview")
-                    st.dataframe(games_df.head())
+            if csv_dict is None:
+                st.warning("No games found for the given parameters.")
+            else:
+                # Load preprocessed data
+                elo_progression = pd.read_csv(csv_dict["elo_progression"])
+                win_rates = pd.read_csv(csv_dict["win_rates"])
+                game_results = pd.read_csv(csv_dict["game_results"])
 
-                    # Win rates
-                    white_win_rate, black_win_rate = calculate_win_rates(games_df)
-                    st.write(f"### Win Rates")
-                    st.write(f"**White Win Rate:** {white_win_rate:.2f}%")
-                    st.write(f"**Black Win Rate:** {black_win_rate:.2f}%")
+                # Layout: Columns for better organization
+                col1, col2 = st.columns(2)
 
-                    # Win rate bar chart
-                    win_rate_data = pd.DataFrame({
-                        "Color": ["White", "Black"],
-                        "Win Rate (%)": [white_win_rate, black_win_rate]
-                    })
-                    fig_win_rate = px.bar(win_rate_data, x="Color", y="Win Rate (%)", title="Win Rate by Color", color="Color")
-                    st.plotly_chart(fig_win_rate)
+                # Data preview
+                with col1:
+                    st.subheader("Elo Progression Data Preview")
+                    st.dataframe(elo_progression.head())
 
-                    # Games by result
-                    results = calculate_games_by_result(games_df)
-                    st.write(f"### Games by Result")
-                    result_data = pd.DataFrame({
-                        "Result": results.index,
-                        "Count": results.values
-                    })
-                    fig_result = px.bar(result_data, x="Result", y="Count", title="Games by Result", color="Result")
-                    st.plotly_chart(fig_result)
+                # Elo progression
+                with col2:
+                    st.subheader("Elo Progression Over Time")
+                    elo_progression["DateNumeric"] = pd.to_datetime(elo_progression["Date"]).map(pd.Timestamp.toordinal)
+                    x = elo_progression["DateNumeric"]
+                    y = elo_progression["UserElo"]
+                    coeffs = np.polyfit(x, y, deg=3)  # Polynomial regression (degree 3)
+                    poly_fit = np.poly1d(coeffs)
+                    elo_progression["FittedElo"] = poly_fit(x)
 
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
+                    fig_elo = px.scatter(
+                        elo_progression,
+                        x="Date",
+                        y="UserElo",
+                        title="Elo Progression Over Time (with Polynomial Fit)",
+                        labels={"Date": "Date", "UserElo": "Elo"},
+                    )
+                    fig_elo.add_scatter(
+                        x=elo_progression["Date"],
+                        y=elo_progression["FittedElo"],
+                        mode="lines",
+                        name="Polynomial Fit",
+                    )
+                    st.plotly_chart(fig_elo, use_container_width=True)
+
+                # Win, draw, and loss rates
+                st.subheader("Win, Draw, and Loss Rates")
+
+                # Prepare data for the stacked bar chart
+                win_rate_stacked = win_rates.melt(
+                    id_vars=["Color"],
+                    value_vars=["Win Rate (%)", "Draw Rate (%)", "Loss Rate (%)"],
+                    var_name="Result Type",
+                    value_name="Percentage"
+                )
+
+                # Create the stacked bar chart
+                fig_win_rate_stacked = px.bar(
+                    win_rate_stacked,
+                    x="Color",
+                    y="Percentage",
+                    color="Result Type",
+                    title="Win, Draw, and Loss Rates by Color",
+                    text="Percentage",
+                    labels={"Percentage": "Percentage (%)", "Color": "Player Color"}
+                )
+
+                # Display the chart
+                st.plotly_chart(fig_win_rate_stacked, use_container_width=True)
+
+                # Games by result
+                st.subheader("Games by Result")
+                fig_result = px.bar(
+                    game_results,
+                    x="Result",
+                    y="Count",
+                    title="Games by Result",
+                    color="Result",
+                    text="Count"
+                )
+                st.plotly_chart(fig_result, use_container_width=True)
+
 
 if __name__ == "__main__":
     main()

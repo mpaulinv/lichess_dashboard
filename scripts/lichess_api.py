@@ -29,8 +29,7 @@ import json
 import pandas as pd
 from pgn_parser import parse_pgn  # Import the PGN parser function
 
-
-def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max_games=None, analyzed=False):
+def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max_games=None, analyzed=None, rated=None):
     """
     Fetch games for a given user from the Lichess API, including PGN data.
 
@@ -40,6 +39,7 @@ def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max
     :param perf_type: Game type (e.g., blitz, bullet, rapid)
     :param max_games: Maximum number of games to retrieve (optional)
     :param analyzed: If True, fetch only analyzed games; if False, fetch only non-analyzed games; if None, fetch all games
+    :param rated: If True, fetch only rated games; if None, fetch all games
     :return: List of dictionaries containing game data
     """
     # Lichess API endpoint for games
@@ -49,16 +49,19 @@ def fetch_lichess_games(username, since=None, until=None, perf_type="blitz", max
     params = {
         "perfType": perf_type,
         "pgnInJson": True,  # Include PGN in the response
-        "accuracy": True,
-        "opening": True,
-        "analysed": analyzed  # Default to False unless specified
+        "accuracy": True,   # Include accuracy data
+        "opening": True     # Include opening data
     }
     if since:
         params["since"] = since
     if until:
         params["until"] = until
     if max_games:
-        params["max"] = max_games  # Only include max if explicitly provided
+        params["max"] = max_games
+    if analyzed is not None:
+        params["analysed"] = analyzed
+    if rated is not None:
+        params["rated"] = rated
 
     # Headers for the request
     headers = {"Accept": "application/x-ndjson"}
