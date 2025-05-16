@@ -17,10 +17,7 @@ def fetch_and_preprocess(username, since, until, variant, analyzed=None, rated=N
     """
     # Fetch games
     games_data = fetch_lichess_games(username, since=since, until=until, perf_type=variant, analyzed=analyzed, rated=rated)
-    
-
     games_df = pd.DataFrame(games_data)
-
     if games_df.empty:
         return None  # No data found
 
@@ -81,5 +78,23 @@ def fetch_and_preprocess(username, since, until, variant, analyzed=None, rated=N
     results.to_csv(result_csv, index=False)
     result_csv.seek(0)
     csv_dict["game_results"] = result_csv
+
+    # Opening performance
+    if "OpeningName" in games_df.columns:
+        opening_performance = games_df.groupby(["UserColor", "OpeningName"])["Result"].value_counts(normalize=True).unstack(fill_value=0).reset_index()
+        opening_performance.columns.name = None  # Remove multi-index
+        opening_performance = opening_performance.rename(columns={"white": "Win", "black": "Loss", "draw": "Draw"})
+
+        # Add total games played for each opening
+        opening_performance["TotalGames"] = games_df.groupby(["UserColor", "OpeningName"])["Result"].count().values
+
+        # Save to a temporary CSV
+        opening_csv = io.StringIO()
+        opening_performance.to_csv(opening_csv, index=False)
+        opening_csv.seek(0)
+        csv_dict["opening_performance"] = opening_csv
+        print(f"Opening performance dataset created with {len(opening_performance)} rows.")  # Debug: Opening performance
+    else:
+        print("Opening data is not available. Skipping opening performance calculation.")  # Debug: Missing opening data
 
     return csv_dict
